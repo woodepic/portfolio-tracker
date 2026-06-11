@@ -7,26 +7,36 @@ import plotly.graph_objects as go
 # Set up the mobile-friendly page layout
 st.set_page_config(page_title="My Portfolio Tracker", layout="centered")
 
-# --- MOBILE UI OPTIMIZATIONS (CSS INJECTION) ---
+# --- AGGRESSIVE MOBILE UI OPTIMIZATIONS (CSS INJECTION) ---
 st.markdown("""
 <style>
-    /* 1. Strip the thick default padding to make the app edge-to-edge */
+    /* 1. Strip the thick default padding to make the app edge-to-edge and pull it to the top */
     .block-container {
-        padding-top: 1rem !important;
+        padding-top: 0rem !important;
         padding-left: 0.5rem !important;
         padding-right: 0.5rem !important;
         padding-bottom: 0rem !important;
         max-width: 100% !important;
     }
     
-    /* 2. Force metrics columns to stay side-by-side on mobile */
-    [data-testid="column"] {
+    /* 2. Drag the main title upward to eliminate dead space */
+    h1 {
+        padding-top: 0rem !important;
+        margin-top: -1rem !important;
+    }
+    
+    /* 3. Force columns to stay side-by-side on mobile by disabling flex-wrap */
+    div[data-testid="stHorizontalBlock"] {
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+    }
+    div[data-testid="column"] {
         width: 50% !important;
         flex: 1 1 50% !important;
         min-width: 50% !important;
     }
     
-    /* 3. Hide the Streamlit header and footer to gain vertical space */
+    /* 4. Hide the Streamlit header and footer to gain vertical space */
     header {visibility: hidden;}
     footer {visibility: hidden;}
 </style>
@@ -151,7 +161,6 @@ if buy_date is not None:
 else:
     x_axis_start = cum_returns.index.min()
 
-# FIX: Reduced height to 350px, adjusted margins, and removed y-axis title for maximum mobile optimization
 fig.update_layout(
     height=350, 
     xaxis_range=[x_axis_start, cum_returns.index.max()],
@@ -163,7 +172,6 @@ fig.update_layout(
     dragmode='pan'
 )
 
-# Adds the % sign to the y-axis ticks directly
 fig.update_yaxes(ticksuffix="%")
 
 st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
