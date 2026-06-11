@@ -29,6 +29,11 @@ st.markdown("""
     /* Hide the Streamlit header and footer */
     header {visibility: hidden;}
     footer {visibility: hidden;}
+
+    /* Force the browser to pass pinch gestures directly to the chart */
+    div[data-testid="stPlotlyChart"] {
+        touch-action: pan-y pinch-zoom !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -135,7 +140,7 @@ cum_returns[benchmark] = (normalized_prices[benchmark] - 1) * 100
 latest_port = cum_returns['My Portfolio'].iloc[-1]
 latest_bench = cum_returns[benchmark].iloc[-1]
 
-# FIX: Replaced Streamlit's restrictive st.columns with a custom HTML Flexbox for perfect side-by-side spacing
+# HTML Flexbox for perfect side-by-side spacing
 st.markdown(f"""
 <div style="display: flex; gap: 2.5rem; margin-top: 10px; margin-bottom: 5px;">
     <div>
@@ -160,7 +165,6 @@ if buy_date is not None:
 else:
     x_axis_start = cum_returns.index.min()
 
-# FIX: Removed `dragmode='pan'` to restore native multi-touch pinch-to-zoom gestures
 fig.update_layout(
     height=380, 
     xaxis_range=[x_axis_start, cum_returns.index.max()],
@@ -169,6 +173,9 @@ fig.update_layout(
     hovermode="x unified",
     xaxis_title=None,
     yaxis_title=None, 
+    
+    # FIX: Re-enable native dragging while keeping axes unlocked
+    dragmode='pan',
     xaxis=dict(fixedrange=False),
     yaxis=dict(fixedrange=False)
 )
