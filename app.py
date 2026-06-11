@@ -7,10 +7,10 @@ import plotly.graph_objects as go
 # Set up the mobile-friendly page layout
 st.set_page_config(page_title="My Portfolio Tracker", layout="centered")
 
-# --- AGGRESSIVE MOBILE UI OPTIMIZATIONS (CSS INJECTION) ---
+# --- AGGRESSIVE MOBILE UI OPTIMIZATIONS ---
 st.markdown("""
 <style>
-    /* 1. Strip the thick default padding to make the app edge-to-edge and pull it to the top */
+    /* Strip the thick default padding to make the app edge-to-edge */
     .block-container {
         padding-top: 0rem !important;
         padding-left: 0.5rem !important;
@@ -19,25 +19,14 @@ st.markdown("""
         max-width: 100% !important;
     }
     
-    /* 2. Drag the main title upward to eliminate dead space */
+    /* Drag the main title upward to eliminate dead space */
     h1 {
         padding-top: 0rem !important;
         margin-top: -1rem !important;
+        margin-bottom: 0.5rem !important;
     }
     
-    /* 3. Force columns to stay side-by-side on mobile by disabling flex-wrap */
-    div[data-testid="stHorizontalBlock"] {
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-    }
-    /* FIX: Factor in the gap between columns so it doesn't exceed 100% screen width */
-    div[data-testid="column"] {
-        width: calc(50% - 0.5rem) !important;
-        flex: 1 1 calc(50% - 0.5rem) !important;
-        min-width: 0 !important;
-    }
-    
-    /* 4. Hide the Streamlit header and footer to gain vertical space */
+    /* Hide the Streamlit header and footer */
     header {visibility: hidden;}
     footer {visibility: hidden;}
 </style>
@@ -63,7 +52,6 @@ time_filter = st.radio(
 
 today = pd.Timestamp(datetime.date.today())
 
-# Determine the exact "Buy Date" and set the maximum allowable API fetch window
 if time_filter == "Custom Date":
     custom_date = st.date_input("Compare from date:", value=datetime.date(2026, 6, 8))
     buy_date = pd.Timestamp(custom_date)
@@ -147,9 +135,19 @@ cum_returns[benchmark] = (normalized_prices[benchmark] - 1) * 100
 latest_port = cum_returns['My Portfolio'].iloc[-1]
 latest_bench = cum_returns[benchmark].iloc[-1]
 
-col1, col2 = st.columns(2)
-col1.metric(f"Portfolio Growth", f"{latest_port:.2f}%")
-col2.metric(f"VFV.TO Growth", f"{latest_bench:.2f}%")
+# FIX: Replaced Streamlit's restrictive st.columns with a custom HTML Flexbox for perfect side-by-side spacing
+st.markdown(f"""
+<div style="display: flex; gap: 2.5rem; margin-top: 10px; margin-bottom: 5px;">
+    <div>
+        <div style="font-size: 0.85rem; color: #a1a1aa; margin-bottom: -5px;">Portfolio Growth</div>
+        <div style="font-size: 2.2rem; font-weight: 600;">{latest_port:.2f}%</div>
+    </div>
+    <div>
+        <div style="font-size: 0.85rem; color: #a1a1aa; margin-bottom: -5px;">VFV.TO Growth</div>
+        <div style="font-size: 2.2rem; font-weight: 600;">{latest_bench:.2f}%</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # 4. PLOTLY INTEGRATION
 fig = go.Figure()
@@ -162,14 +160,15 @@ if buy_date is not None:
 else:
     x_axis_start = cum_returns.index.min()
 
+# FIX: Removed `dragmode='pan'` to restore native multi-touch pinch-to-zoom gestures
 fig.update_layout(
-    height=350, 
+    height=380, 
     xaxis_range=[x_axis_start, cum_returns.index.max()],
     margin=dict(l=0, r=0, t=10, b=0),
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     hovermode="x unified",
-    dragmode='pan',
-    # FIX: Explicitly tell Plotly to unlock the axes so mobile pinch-to-zoom works
+    xaxis_title=None,
+    yaxis_title=None, 
     xaxis=dict(fixedrange=False),
     yaxis=dict(fixedrange=False)
 )
