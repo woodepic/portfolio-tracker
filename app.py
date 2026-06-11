@@ -69,41 +69,50 @@ def load_data(period, interval):
         st.error("The data table is empty.")
         st.stop()
         
+    # Convert AVUS to CAD
     data['AVUS_CAD'] = data['AVUS'] * data['CAD=X']
-    returns = data.pct_change().dropna()
     
-    returns['My Portfolio'] = (
-        returns['AVUS_CAD'] * portfolio_weights['AVUS'] +
-        returns['CACE.TO'] * portfolio_weights['CACE.TO'] +
-        returns['CADE.TO'] * portfolio_weights['CADE.TO'] +
-        returns['CAEM.TO'] * portfolio_weights['CAEM.TO'] +
-        returns['CASV.TO'] * portfolio_weights['CASV.TO']
-    )
-    return returns[['My Portfolio', benchmark]]
+    # FIX: We now return the raw share prices instead of daily percentage returns
+    cols_to_keep = ['AVUS_CAD', 'CACE.TO', 'CADE.TO', 'CAEM.TO', 'CASV.TO', benchmark]
+    return data[cols_to_keep]
 
 with st.spinner("Fetching high-resolution market data..."):
     try:
-        daily_returns = load_data(period_str, interval_str)
+        daily_prices = load_data(period_str, interval_str)
     except Exception as e:
         st.error(f"Error loading data: {e}")
         st.stop()
 
-# 2. Slice the data based on the chosen time window
+# 2. Slice the raw price data based on the chosen time window
 if time_filter == "Custom Date":
-    filtered_returns = daily_returns.loc[daily_returns.index >= start_date]
+    filtered_prices = daily_prices.loc[daily_prices.index >= start_date]
 elif time_filter == "1D":
-    latest_date = daily_returns.index.max().date()
-    filtered_returns = daily_returns.loc[daily_returns.index.date == latest_date]
+    latest_date = daily_prices.index.max().date()
+    filtered_prices = daily_prices.loc[daily_prices.index.date == latest_date]
 else:
-    filtered_returns = daily_returns
+    filtered_prices = daily_prices
 
-if filtered_returns.empty:
+if filtered_prices.empty:
     st.warning("Not enough data for this specific time period. The ETFs may not have existed yet.")
 else:
-    # 3. Compounding growth base calculations
-    cum_returns = (1 + filtered_returns).cumprod()
-    cum_returns = (cum_returns / cum_returns.iloc[0]) - 1
-    cum_returns = cum_returns * 100 
+    # 3. FIX: BUY AND HOLD MATH
+    # Normalize all prices so they start at 1.0 (representing 100% of your starting capital) on Day 1
+    normalized_prices = filtered_prices / filtered_prices.iloc[0]
+
+    # Create a new table to hold our final chart numbers
+    cum_returns = pd.DataFrame(index=normalized_prices.index)
+
+    # Multiply the normalized share prices by your exact initial buy weights, minus 1 to get profit/loss
+    cum_returns['My Portfolio'] = (
+        (normalized_prices['AVUS_CAD'] * portfolio_weights['AVUS'] +
+         normalized_prices['CACE.TO'] * portfolio_weights['CACE.TO'] +
+         normalized_prices['CADE.TO'] * portfolio_weights['CADE.TO'] +
+         normalized_prices['CAEM.TO'] * portfolio_weights['CAEM.TO'] +
+         normalized_prices['CASV.TO'] * portfolio_weights['CASV.TO']) - 1
+    ) * 100
+
+    # Calculate the benchmark using the exact same logic
+    cum_returns[benchmark] = (normalized_prices[benchmark] - 1) * 100
 
     latest_actual_time = cum_returns.index.max()
 
@@ -114,7 +123,6 @@ else:
         market_start = pd.Timestamp(datetime.datetime.combine(current_date, datetime.time(9, 30)))
         market_end = pd.Timestamp(datetime.datetime.combine(current_date, datetime.time(16, 0)))
         
-        # FIX: lowercase 's' for modern Pandas compatibility
         full_schedule = pd.date_range(start=market_start, end=market_end, periods=50).round('s')
         chart_data = pd.DataFrame(index=full_schedule, columns=cum_returns.columns)
         
@@ -146,4 +154,4 @@ else:
     
     # Display the final synchronized line chart
     st.line_chart(chart_data)
-    st.caption(f"Chart resolution normalized to 50 points. Performance charts are indexed to 0% at inception.")
+    st.caption(f"Buy and Hold Performance: Assumes exact weights purchased at the start of the window with no rebalancing.")
