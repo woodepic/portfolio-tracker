@@ -30,10 +30,11 @@ st.markdown("""
         flex-direction: row !important;
         flex-wrap: nowrap !important;
     }
+    /* FIX: Factor in the gap between columns so it doesn't exceed 100% screen width */
     div[data-testid="column"] {
-        width: 50% !important;
-        flex: 1 1 50% !important;
-        min-width: 50% !important;
+        width: calc(50% - 0.5rem) !important;
+        flex: 1 1 calc(50% - 0.5rem) !important;
+        min-width: 0 !important;
     }
     
     /* 4. Hide the Streamlit header and footer to gain vertical space */
@@ -167,9 +168,10 @@ fig.update_layout(
     margin=dict(l=0, r=0, t=10, b=0),
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     hovermode="x unified",
-    xaxis_title=None,
-    yaxis_title=None, 
-    dragmode='pan'
+    dragmode='pan',
+    # FIX: Explicitly tell Plotly to unlock the axes so mobile pinch-to-zoom works
+    xaxis=dict(fixedrange=False),
+    yaxis=dict(fixedrange=False)
 )
 
 fig.update_yaxes(ticksuffix="%")
