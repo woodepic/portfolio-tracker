@@ -55,12 +55,12 @@ time_filter = st.radio(
     horizontal=True
 )
 
+# We still use today temporarily just to determine the API fetch window depth
 today = pd.Timestamp(datetime.date.today())
 
 if time_filter == "Custom Date":
     custom_date = st.date_input("Compare from date:", value=datetime.date(2026, 6, 8))
-    buy_date = pd.Timestamp(custom_date)
-    window_days = (today - buy_date).days
+    window_days = (today - pd.Timestamp(custom_date)).days
     
     if window_days <= 7:
         period_str, interval_str = "1mo", "15m"
@@ -79,13 +79,6 @@ else:
         "ALL": (None, "10y", "1d")
     }
     time_delta, period_str, interval_str = mapping[time_filter]
-    
-    if time_filter == "ALL":
-        buy_date = None
-    elif time_filter == "1D":
-        buy_date = pd.Timestamp(datetime.datetime.combine(today.date(), datetime.time(9, 30)))
-    else:
-        buy_date = today - time_delta
 
 @st.cache_data(ttl=60)
 def load_data(period, interval):
@@ -114,15 +107,46 @@ with st.spinner("Fetching maximum allowable market data..."):
         st.error(f"Error loading data: {e}")
         st.stop()
 
-# 2. ISOLATE THE EXACT BUY PRICE
-if buy_date is not None:
-    actual_buy_date_index = padded_prices.index[padded_prices.index >= buy_date]
-    if actual_buy_date_index.empty:
+# 2. ISOLATE THE EXACT BUY PRICE (FIXED LOGIC)
+if time_filter == "1D":
+    # BUG 2 FIX: Identify the latest market day, completely ignoring your phone's clock
+    latest_day = padded_prices.index.max().normalize()
+    
+    # BUG 1 FIX: Grab all data strictly prior to this latest day to find yesterday's closing price
+    prior_prices = padded_prices.loc[padded_prices.index < latest_day]
+    
+    if not prior_prices.empty:
+        buy_date_prices = prior_prices.iloc[-1]
+    else:
+        buy_date_prices = padded_prices.iloc[0]
+        
+    x_axis_start = latest_day + pd.Timedelta(hours=9, minutes=30)
+
+elif time_filter == "ALL":
+    buy_date_prices = padded_prices.iloc[0]
+    x_axis_start = padded_prices.index.min()
+
+elif time_filter == "Custom Date":
+    target_date = pd.Timestamp(custom_date)
+    valid_indices = padded_prices.index[padded_prices.index >= target_date]
+    if valid_indices.empty:
         st.warning("Not enough data for this specific time period. The ETFs may not have existed yet.")
         st.stop()
-    buy_date_prices = padded_prices.loc[actual_buy_date_index[0]]
+    buy_date_prices = padded_prices.loc[valid_indices[0]]
+    x_axis_start = target_date
+
 else:
-    buy_date_prices = padded_prices.iloc[0]
+    # BUG 2 FIX: Calculate time windows backward from the market's latest timestamp, not midnight tonight
+    latest_timestamp = padded_prices.index.max()
+    target_date = latest_timestamp - time_delta
+    
+    valid_indices = padded_prices.index[padded_prices.index >= target_date]
+    if valid_indices.empty:
+        buy_date_prices = padded_prices.iloc[0]
+    else:
+        buy_date_prices = padded_prices.loc[valid_indices[0]]
+        
+    x_axis_start = target_date
 
 # 3. BUY AND HOLD MATH
 normalized_prices = padded_prices / buy_date_prices
@@ -160,11 +184,6 @@ fig = go.Figure()
 fig.add_trace(go.Scatter(x=cum_returns.index, y=cum_returns['My Portfolio'], mode='lines', name='My Portfolio', line=dict(color='#3b82f6', width=2)))
 fig.add_trace(go.Scatter(x=cum_returns.index, y=cum_returns[benchmark], mode='lines', name='VFV.TO', line=dict(color='#10b981', width=2)))
 
-if buy_date is not None:
-    x_axis_start = buy_date
-else:
-    x_axis_start = cum_returns.index.min()
-
 fig.update_layout(
     height=380, 
     xaxis_range=[x_axis_start, cum_returns.index.max()],
@@ -173,8 +192,6 @@ fig.update_layout(
     hovermode="x unified",
     xaxis_title=None,
     yaxis_title=None, 
-    
-    # FIX: Re-enable native dragging while keeping axes unlocked
     dragmode='pan',
     xaxis=dict(fixedrange=False),
     yaxis=dict(fixedrange=False)
@@ -182,4 +199,14 @@ fig.update_layout(
 
 fig.update_yaxes(ticksuffix="%")
 
-st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
+# Adds the minimal toolbar back to guarantee pinch-to-zoom works on iOS without cluttering the screen
+minimal_config = {
+    'displayModeBar': True,
+    'displaylogo': False,
+    'modeBarButtonsToRemove': [
+        'lasso2d', 'select2d', 'autoScale2d', 
+        'hoverClosestCartesian', 'hoverCompareCartesian', 'toggleSpikelines'
+    ]
+}
+
+st.plotly_chart(fig, use_container_width=True, config=minimal_config)
